@@ -18,7 +18,6 @@ GitHub Copilot을 활용한 AI 네이티브 워크플로우 확장을 보여주�
 """
 
 import json
-import re
 import sys
 from datetime import date, datetime
 from pathlib import Path
@@ -159,8 +158,17 @@ def highlight_matches(value: str, keyword: str) -> Text:
         일치하는 부분이 굵은 노란색으로 표시된 Rich Text 객체입니다.
     """
     text = Text(value)
-    for match in re.finditer(re.escape(keyword), value, re.IGNORECASE):
-        text.stylize("bold yellow", match.start(), match.end())
+    folded_keyword = keyword.casefold()
+    if not folded_keyword:
+        return text
+
+    folded_value = value.casefold()
+    positions = [index for index, char in enumerate(value) for _ in char.casefold()]
+    start = folded_value.find(folded_keyword)
+    while start != -1:
+        end = start + len(folded_keyword)
+        text.stylize("bold yellow", positions[start], positions[end - 1] + 1)
+        start = folded_value.find(folded_keyword, end)
     return text
 
 
