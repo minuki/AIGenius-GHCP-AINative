@@ -6,7 +6,9 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+from rich.console import Console
 
+import app
 from app import (
     add,
     cli,
@@ -191,6 +193,12 @@ class TestListCommand:
 
 
 class TestSearchCommand:
+    def test_search_appears_in_help(self, runner: CliRunner) -> None:
+        result = runner.invoke(cli, ["--help"])
+
+        assert result.exit_code == 0
+        assert "search" in result.output
+
     def test_search_matches_name_and_description(
         self, runner: CliRunner, sample_tasks: list[dict]
     ) -> None:
@@ -225,6 +233,43 @@ class TestSearchCommand:
 
         assert highlighted.plain == "Deploy release"
         assert any(span.style == "bold yellow" for span in highlighted.spans)
+
+    def test_search_highlights_name_and_description_in_output(
+        self, runner: CliRunner, isolated_tasks_file: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        save_tasks(
+            [
+                {
+                    "id": 1, "name": "Report report", "description": "REPORT ready",
+                    "priority": "high", "done": False,
+                },
+            ]
+        )
+        monkeypatch.setattr(app, "console", Console(force_terminal=True, color_system="standard"))
+
+        result = runner.invoke(cli, ["search", "report"])
+
+        assert result.exit_code == 0
+        assert "\x1b[1;33mReport\x1b[0m" in result.output
+        assert "\x1b[1;33mreport\x1b[0m" in result.output
+        assert "\x1b[1;33mREPORT\x1b[0m" in result.output
+
+    def test_search_highlights_casefolded_match(
+        self, runner: CliRunner, isolated_tasks_file: Path
+    ) -> None:
+        save_tasks(
+            [
+                {"id": 1, "name": "Straße", "description": "", "priority": "low", "done": False},
+            ]
+        )
+
+        result = runner.invoke(cli, ["search", "STRASSE"])
+
+        assert result.exit_code == 0
+        assert "Straße" in result.output
+        spans = highlight_matches("Straße", "STRASSE").spans
+        assert len(spans) == 1
+        assert (spans[0].start, spans[0].end, spans[0].style) == (0, 6, "bold yellow")
 
     def test_search_no_matches(self, runner: CliRunner, sample_tasks: list[dict]) -> None:
         result = runner.invoke(cli, ["search", "unknown"])
